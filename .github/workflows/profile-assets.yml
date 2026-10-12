@@ -13,10 +13,20 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Load previous assets
+        continue-on-error: true
+        uses: actions/checkout@v6
+        with:
+          ref: output
+          path: dist
+
+      - name: Clean previous assets folder
+        run: rm -rf dist/.git
 
       - name: Generate contribution snake
         id: snake
@@ -34,6 +44,7 @@ jobs:
 
       - name: Retry contribution snake
         if: steps.snake.outcome == 'failure'
+        continue-on-error: true
         uses: Platane/snk/svg-only@v3
         with:
           github_user_name: ${{ github.repository_owner }}
@@ -41,21 +52,261 @@ jobs:
             dist/github-snake.svg?color_snake=#8B5CF6
             dist/github-snake-dark.svg?palette=github-dark&color_snake=#BB9AF7
 
-      - name: Generate stats card
-        uses: stats-organization/github-readme-stats-action@v2
-        with:
-          card: stats
-          options: username=${{ github.repository_owner }}&show_icons=true&theme=tokyonight&hide_border=true&border_radius=10&custom_title=Saket%27s%20GitHub%20Stats
-          path: dist/stats.svg
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate stats and streak cards
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_USER: ${{ github.repository_owner }}
+          CARD_TITLE: "Saket's GitHub Stats"
+        run: |
+          python3 - "$GH_USER" dist <<'PY'
+          import json
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from datetime import date, datetime, timedelta, timezone
+          from html import escape
+
+          API = "https://api.github.com"
+          FONT = "'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif"
+          BG, TITLE, TEXT, VALUE, ACCENT, MUTED = "#1a1b27", "#70a5fd", "#38bdae", "#c0caf5", "#bf91f3", "#787c99"
+
+          CALENDAR_QUERY = """
+          query($login: String!, $from: DateTime!, $to: DateTime!) {
+            user(login: $login) {
+              contributionsCollection(from: $from, to: $to) {
+                contributionCalendar { weeks { contributionDays { date contributionCount } } }
+              }
+            }
+          }
+          """
+
+          YEARS_QUERY = """
+          query($login: String!) {
+            user(login: $login) { contributionsCollection { contributionYears } }
+          }
+          """
+
+
+          def request(url, body=None, token=None, attempts=4):
+              token = token or os.environ["GITHUB_TOKEN"]
+              data = json.dumps(body).encode() if body is not None else None
+              headers = {
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "User-Agent": "profile-cards",
+              }
+              if data:
+                  headers["Content-Type"] = "application/json"
+              error = None
+              for attempt in range(attempts):
+                  try:
+                      req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
+                      with urllib.request.urlopen(req, timeout=60) as res:
+                          payload = json.loads(res.read().decode())
+                      if isinstance(payload, dict) and payload.get("errors"):
+                          raise RuntimeError(payload["errors"])
+                      return payload
+                  except (urllib.error.URLError, ValueError, RuntimeError, TimeoutError) as exc:
+                      error = exc
+                      time.sleep(5 * (attempt + 1))
+              raise RuntimeError(f"{url} failed: {error}")
+
+
+          def graphql(query, variables):
+              return request(f"{API}/graphql", {"query": query, "variables": variables})["data"]
+
+
+          def search_count(query):
+              return request(f"{API}/search/{query}")["total_count"]
+
+
+          def fetch_calendar(user, today):
+              years = graphql(YEARS_QUERY, {"login": user})["user"]["contributionsCollection"]["contributionYears"]
+              now = datetime.now(timezone.utc).replace(microsecond=0)
+              days = {}
+              for year in sorted(years):
+                  start = datetime(year, 1, 1, tzinfo=timezone.utc)
+                  end = min(datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc), now)
+                  if start > now:
+                      continue
+                  variables = {"login": user, "from": start.isoformat().replace("+00:00", "Z"), "to": end.isoformat().replace("+00:00", "Z")}
+                  weeks = graphql(CALENDAR_QUERY, variables)["user"]["contributionsCollection"]["contributionCalendar"]["weeks"]
+                  for week in weeks:
+                      for day in week["contributionDays"]:
+                          d = date.fromisoformat(day["date"])
+                          if d.year == year and d <= today:
+                              days[d] = day["contributionCount"]
+              return days
+
+
+          def compute_streaks(days, today):
+              if not days:
+                  return {"total": 0, "first": today, "current": (0, today, today), "longest": (0, today, today), "past_year": 0}
+              total = sum(days.values())
+              first = min((d for d, c in days.items() if c > 0), default=today)
+              longest, run, run_start = (0, today, today), 0, None
+              d = min(days)
+              while d <= today:
+                  if days.get(d, 0) > 0:
+                      run_start = d if run == 0 else run_start
+                      run += 1
+                      if run > longest[0]:
+                          longest = (run, run_start, d)
+                  else:
+                      run = 0
+                  d += timedelta(days=1)
+              end = today if days.get(today, 0) > 0 else today - timedelta(days=1)
+              count, d = 0, end
+              while days.get(d, 0) > 0:
+                  count += 1
+                  d -= timedelta(days=1)
+              current = (count, d + timedelta(days=1), end) if count else (0, today, today)
+              past_year = sum(c for day, c in days.items() if day > today - timedelta(days=365))
+              return {"total": total, "first": first, "current": current, "longest": longest, "past_year": past_year}
+
+
+          def fetch_stats(user):
+              stars, page = 0, 1
+              while True:
+                  repos = request(f"{API}/users/{user}/repos?per_page=100&type=owner&page={page}")
+                  stars += sum(r["stargazers_count"] for r in repos if not r["fork"])
+                  if len(repos) < 100:
+                      break
+                  page += 1
+              q = urllib.parse.quote
+              return [
+                  ("Total Stars", stars),
+                  ("Total Commits", search_count(f"commits?q={q(f'author:{user}')}")),
+                  ("Pull Requests", search_count(f"issues?q={q(f'author:{user} type:pr')}")),
+                  ("Merged PRs", search_count(f"issues?q={q(f'author:{user} type:pr is:merged')}")),
+                  ("Issues Opened", search_count(f"issues?q={q(f'author:{user} type:issue')}")),
+              ]
+
+
+          def fmt_date(d, today):
+              return f"{d:%b} {d.day}" if d.year == today.year else f"{d:%b} {d.day}, {d.year}"
+
+
+          def fmt_range(start, end, today, present=False):
+              end_text = "Present" if present else fmt_date(end, today)
+              return fmt_date(start, today) if start == end and not present else f"{fmt_date(start, today)} - {end_text}"
+
+
+          def stats_svg(title, rows, ring_value, ring_label):
+              lines = []
+              for i, (label, value) in enumerate(rows):
+                  y = 68 + i * 25
+                  lines.append(
+                      f'<g class="row" style="animation-delay:{150 + i * 120}ms">'
+                      f'<circle cx="31" cy="{y - 5}" r="4" fill="{ACCENT}"/>'
+                      f'<text x="45" y="{y}" class="label">{escape(label)}</text>'
+                      f'<text x="290" y="{y}" class="value" text-anchor="end">{value:,}</text></g>'
+                  )
+              ring_text = f"{ring_value:,}"
+              size = 24 if len(ring_text) <= 4 else 19 if len(ring_text) <= 6 else 15
+              return f"""<svg xmlns="http://www.w3.org/2000/svg" width="467" height="195" viewBox="0 0 467 195" role="img" aria-label="{escape(title)}">
+          <title>{escape(title)}</title>
+          <style>
+          .title{{font:600 18px {FONT};fill:{TITLE}}}
+          .label{{font:600 14px {FONT};fill:{TEXT}}}
+          .value{{font:700 14px {FONT};fill:{VALUE}}}
+          .big{{font:800 {size}px {FONT};fill:{VALUE}}}
+          .small{{font:600 12px {FONT};fill:{TEXT}}}
+          .row,.fade{{opacity:0;animation:fade .5s ease-in-out forwards}}
+          .ring{{stroke-dasharray:251.3;stroke-dashoffset:251.3;animation:draw 1.2s ease-out .3s forwards}}
+          @keyframes fade{{to{{opacity:1}}}}
+          @keyframes draw{{to{{stroke-dashoffset:0}}}}
+          </style>
+          <rect x="0.5" y="0.5" width="466" height="194" rx="10" fill="{BG}"/>
+          <text x="25" y="36" class="title">{escape(title)}</text>
+          {''.join(lines)}
+          <g transform="translate(385 100)">
+          <circle r="40" fill="none" stroke="{TITLE}" stroke-opacity="0.2" stroke-width="6"/>
+          <circle r="40" fill="none" stroke="{TITLE}" stroke-width="6" stroke-linecap="round" class="ring" transform="rotate(-90)"/>
+          <text y="{size // 3}" text-anchor="middle" class="big fade" style="animation-delay:600ms">{ring_text}</text>
+          <text y="64" text-anchor="middle" class="small fade" style="animation-delay:800ms">{escape(ring_label)}</text>
+          </g>
+          </svg>
+          """
+
+
+          def streak_svg(s, today):
+              total_range = fmt_range(s["first"], today, today, present=True)
+              cur_n, cur_start, cur_end = s["current"]
+              long_n, long_start, long_end = s["longest"]
+              cur_range = fmt_range(cur_start, cur_end, today) if cur_n else fmt_date(today, today)
+              long_range = fmt_range(long_start, long_end, today) if long_n else "No streak yet"
+              return f"""<svg xmlns="http://www.w3.org/2000/svg" width="495" height="195" viewBox="0 0 495 195" role="img" aria-label="GitHub contribution streak">
+          <title>GitHub contribution streak</title>
+          <style>
+          .num{{font:700 28px {FONT};fill:{VALUE}}}
+          .cur{{font:700 28px {FONT};fill:{TITLE}}}
+          .lbl{{font:600 14px {FONT};fill:{TEXT}}}
+          .curlbl{{font:700 14px {FONT};fill:{TITLE}}}
+          .date{{font:400 12px {FONT};fill:{MUTED}}}
+          .fade{{opacity:0;animation:fade .6s ease-in-out forwards}}
+          .ring{{stroke-dasharray:251.3;stroke-dashoffset:251.3;animation:draw 1.2s ease-out .2s forwards}}
+          @keyframes fade{{to{{opacity:1}}}}
+          @keyframes draw{{to{{stroke-dashoffset:0}}}}
+          </style>
+          <rect x="0.5" y="0.5" width="494" height="194" rx="10" fill="{BG}"/>
+          <line x1="165" y1="28" x2="165" y2="170" stroke="{MUTED}" stroke-opacity="0.4"/>
+          <line x1="330" y1="28" x2="330" y2="170" stroke="{MUTED}" stroke-opacity="0.4"/>
+          <g class="fade" style="animation-delay:100ms" text-anchor="middle">
+          <text x="82.5" y="79" class="num">{s["total"]:,}</text>
+          <text x="82.5" y="114" class="lbl">Total Contributions</text>
+          <text x="82.5" y="142" class="date">{escape(total_range)}</text>
+          </g>
+          <g transform="translate(247.5 71)">
+          <circle r="40" fill="none" stroke="{TITLE}" stroke-width="5" stroke-linecap="round" class="ring" transform="rotate(-90)"/>
+          <circle cy="-40" r="13" fill="{BG}"/>
+          <path d="M0 -52 C7 -45 9 -38 0 -30 C-9 -38 -7 -45 0 -52 Z" fill="{ACCENT}" class="fade" style="animation-delay:900ms"/>
+          </g>
+          <g class="fade" style="animation-delay:400ms" text-anchor="middle">
+          <text x="247.5" y="81" class="cur">{cur_n:,}</text>
+          <text x="247.5" y="140" class="curlbl">Current Streak</text>
+          <text x="247.5" y="166" class="date">{escape(cur_range)}</text>
+          </g>
+          <g class="fade" style="animation-delay:700ms" text-anchor="middle">
+          <text x="412.5" y="79" class="num">{long_n:,}</text>
+          <text x="412.5" y="114" class="lbl">Longest Streak</text>
+          <text x="412.5" y="142" class="date">{escape(long_range)}</text>
+          </g>
+          </svg>
+          """
+
+
+          def main():
+              user, out = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "dist"
+              title = os.environ.get("CARD_TITLE") or f"{user}'s GitHub Stats"
+              today = datetime.now(timezone.utc).date()
+              streaks = compute_streaks(fetch_calendar(user, today), today)
+              rows = fetch_stats(user)
+              os.makedirs(out, exist_ok=True)
+              with open(os.path.join(out, "stats.svg"), "w", encoding="utf-8") as f:
+                  f.write(stats_svg(title, rows, streaks["past_year"], "Past year"))
+              with open(os.path.join(out, "streak.svg"), "w", encoding="utf-8") as f:
+                  f.write(streak_svg(streaks, today))
+              print(f"stats: {rows} | streaks: {streaks}")
+
+
+          if __name__ == "__main__":
+              main()
+          PY
 
       - name: Generate top languages card
+        continue-on-error: true
         uses: stats-organization/github-readme-stats-action@v2
         with:
           card: top-langs
           options: username=${{ github.repository_owner }}&layout=compact&langs_count=8&theme=tokyonight&hide_border=true&border_radius=10
           path: dist/top-langs.svg
           token: ${{ secrets.GITHUB_TOKEN }}
+          fail_on_error: true
 
       - name: Publish to the output branch
         uses: crazy-max/ghaction-github-pages@v5
