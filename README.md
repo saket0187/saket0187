@@ -15,7 +15,7 @@
 
 - 🎓 Pursuing Master's in Computer Applications @ **SRM IST** 
 - 🌍 **GSoC 2026** @ [GRASS](https://saket0187.github.io/projects/grass-stds-datacatalog/) 
-- ⚡ **1000+** problems · **1900+** LeetCode rating · TCS CodeVita **Global Rank 786**
+- ⚡ **1100+** problems · **1900+** LeetCode rating · TCS CodeVita **Global Rank 786**
 
 ## Projects
 
@@ -38,7 +38,7 @@
   <img src="https://raw.githubusercontent.com/saket0187/saket0187/output/stats.svg" height="170" alt="GitHub stats"/>
   <img src="https://raw.githubusercontent.com/saket0187/saket0187/output/top-langs.svg" height="170" alt="Most used languages"/>
   <br/><br/>
-  <img src="https://streak-stats.demolab.com?user=saket0187&theme=tokyonight&hide_border=true&border_radius=10" alt="GitHub streak"/>
+  <img src="https://raw.githubusercontent.com/saket0187/saket0187/output/streak.svg" height="170" alt="GitHub streak"/>
   <br/><br/>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/saket0187/saket0187/output/github-snake-dark.svg"/>
@@ -49,6 +49,6 @@
 
 <div align="center">
   <br/>
-  <a href="https://visitcount.itsvg.in"><img src="https://visitcount.itsvg.in/api?id=saket0187&icon=0&color=0" alt="Profile views"/></a>
+  <img src="https://komarev.com/ghpvc/?username=saket0187&label=Profile%20views&color=8b5cf6&style=for-the-badge" alt="Profile views"/>
   <img src="https://capsule-render.vercel.app/api?type=waving&color=0:1E3A8A,50:5B21B6,100:2E1065&height=120&section=footer" width="100%" alt=""/>
 </div>
