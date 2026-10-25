@@ -15,7 +15,7 @@
 
 - 🎓 Pursuing Master's in Computer Applications @ **SRM IST** 
 - 🌍 **GSoC 2026** @ [GRASS](https://saket0187.github.io/projects/grass-stds-datacatalog/) 
-- ⚡ **1100+** problems · **1900+** LeetCode rating · TCS CodeVita **Global Rank 786**
+- ⚡ Solved **1100+** problems · **1900+** LeetCode rating · TCS CodeVita **Global Rank 786**
 
 ## Projects
 
