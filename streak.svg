@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="495" height="195" viewBox="0 0 495 195" role="img" aria-label="GitHub contribution streak">
+<title>GitHub contribution streak</title>
+<style>
+.num{font:700 28px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#c0caf5}
+.cur{font:700 28px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#70a5fd}
+.lbl{font:600 14px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#38bdae}
+.curlbl{font:700 14px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#70a5fd}
+.date{font:400 12px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#787c99}
+.fade{opacity:0;animation:fade .6s ease-in-out forwards}
+.ring{stroke-dasharray:251.3;stroke-dashoffset:251.3;animation:draw 1.2s ease-out .2s forwards}
+@keyframes fade{to{opacity:1}}
+@keyframes draw{to{stroke-dashoffset:0}}
+</style>
+<rect x="0.5" y="0.5" width="494" height="194" rx="10" fill="#1a1b27"/>
+<line x1="165" y1="28" x2="165" y2="170" stroke="#787c99" stroke-opacity="0.4"/>
+<line x1="330" y1="28" x2="330" y2="170" stroke="#787c99" stroke-opacity="0.4"/>
+<g class="fade" style="animation-delay:100ms" text-anchor="middle">
+<text x="82.5" y="79" class="num">262</text>
+<text x="82.5" y="114" class="lbl">Total Contributions</text>
+<text x="82.5" y="142" class="date">Sep 28, 2020 - Present</text>
+</g>
+<g transform="translate(247.5 71)">
+<circle r="40" fill="none" stroke="#70a5fd" stroke-width="5" stroke-linecap="round" class="ring" transform="rotate(-90)"/>
+<circle cy="-40" r="13" fill="#1a1b27"/>
+<path d="M0 -52 C7 -45 9 -38 0 -30 C-9 -38 -7 -45 0 -52 Z" fill="#bf91f3" class="fade" style="animation-delay:900ms"/>
+</g>
+<g class="fade" style="animation-delay:400ms" text-anchor="middle">
+<text x="247.5" y="81" class="cur">0</text>
+<text x="247.5" y="140" class="curlbl">Current Streak</text>
+<text x="247.5" y="166" class="date">Oct 31</text>
+</g>
+<g class="fade" style="animation-delay:700ms" text-anchor="middle">
+<text x="412.5" y="79" class="num">9</text>
+<text x="412.5" y="114" class="lbl">Longest Streak</text>
+<text x="412.5" y="142" class="date">Oct 17 - Oct 25</text>
+</g>
+</svg>

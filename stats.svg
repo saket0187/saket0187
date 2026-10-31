@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="467" height="195" viewBox="0 0 467 195" role="img" aria-label="Saket&#x27;s GitHub Stats">
+<title>Saket&#x27;s GitHub Stats</title>
+<style>
+.title{font:600 18px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#70a5fd}
+.label{font:600 14px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#38bdae}
+.value{font:700 14px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#c0caf5}
+.big{font:800 24px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#c0caf5}
+.small{font:600 12px 'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif;fill:#38bdae}
+.row,.fade{opacity:0;animation:fade .5s ease-in-out forwards}
+.ring{stroke-dasharray:251.3;stroke-dashoffset:251.3;animation:draw 1.2s ease-out .3s forwards}
+@keyframes fade{to{opacity:1}}
+@keyframes draw{to{stroke-dashoffset:0}}
+</style>
+<rect x="0.5" y="0.5" width="466" height="194" rx="10" fill="#1a1b27"/>
+<text x="25" y="36" class="title">Saket&#x27;s GitHub Stats</text>
+<g class="row" style="animation-delay:150ms"><circle cx="31" cy="63" r="4" fill="#bf91f3"/><text x="45" y="68" class="label">Total Stars</text><text x="290" y="68" class="value" text-anchor="end">1</text></g><g class="row" style="animation-delay:270ms"><circle cx="31" cy="88" r="4" fill="#bf91f3"/><text x="45" y="93" class="label">Total Commits</text><text x="290" y="93" class="value" text-anchor="end">186</text></g><g class="row" style="animation-delay:390ms"><circle cx="31" cy="113" r="4" fill="#bf91f3"/><text x="45" y="118" class="label">Pull Requests</text><text x="290" y="118" class="value" text-anchor="end">78</text></g><g class="row" style="animation-delay:510ms"><circle cx="31" cy="138" r="4" fill="#bf91f3"/><text x="45" y="143" class="label">Merged PRs</text><text x="290" y="143" class="value" text-anchor="end">62</text></g><g class="row" style="animation-delay:630ms"><circle cx="31" cy="163" r="4" fill="#bf91f3"/><text x="45" y="168" class="label">Issues Opened</text><text x="290" y="168" class="value" text-anchor="end">5</text></g>
+<g transform="translate(385 100)">
+<circle r="40" fill="none" stroke="#70a5fd" stroke-opacity="0.2" stroke-width="6"/>
+<circle r="40" fill="none" stroke="#70a5fd" stroke-width="6" stroke-linecap="round" class="ring" transform="rotate(-90)"/>
+<text y="8" text-anchor="middle" class="big fade" style="animation-delay:600ms">193</text>
+<text y="64" text-anchor="middle" class="small fade" style="animation-delay:800ms">Past year</text>
+</g>
+</svg>
