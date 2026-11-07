@@ -307,21 +307,22 @@ jobs:
         run: |
           python3 - "$GH_USER" dist <<'PY'
           import json
+          import math
           import os
           import sys
           import time
           import urllib.request
-          from datetime import date
+          from datetime import date, datetime, timezone
           from html import escape
 
-          DAYS = 31
+          MONTHS = 12
           FONT = "'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif"
-          BG, TITLE, TEXT, GRID, LINE, POINT = "#1a1b27", "#70a5fd", "#a9b1d6", "#2a2e45", "#bf91f3", "#38bdae"
+          BG, TITLE, TEXT, MUTED, GRID, LINE, POINT = "#1a1b27", "#70a5fd", "#a9b1d6", "#787c99", "#2a2e45", "#bf91f3", "#38bdae"
 
           QUERY = """
-          query($login: String!) {
+          query($login: String!, $from: DateTime!, $to: DateTime!) {
             user(login: $login) {
-              contributionsCollection {
+              contributionsCollection(from: $from, to: $to) {
                 contributionCalendar { weeks { contributionDays { date contributionCount } } }
               }
             }
@@ -329,8 +330,25 @@ jobs:
           """
 
 
-          def fetch_days(user):
-              body = json.dumps({"query": QUERY, "variables": {"login": user}}).encode()
+          def month_list(today):
+              y, m = today.year, today.month
+              out = []
+              for _ in range(MONTHS):
+                  out.append((y, m))
+                  y, m = (y, m - 1) if m > 1 else (y - 1, 12)
+              return out[::-1]
+
+
+          def fetch_months(user, today):
+              months = month_list(today)
+              start = datetime(months[0][0], months[0][1], 1, tzinfo=timezone.utc)
+              now = datetime.now(timezone.utc).replace(microsecond=0)
+              variables = {
+                  "login": user,
+                  "from": start.isoformat().replace("+00:00", "Z"),
+                  "to": now.isoformat().replace("+00:00", "Z"),
+              }
+              body = json.dumps({"query": QUERY, "variables": variables}).encode()
               headers = {
                   "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
                   "Content-Type": "application/json",
@@ -345,31 +363,43 @@ jobs:
                       if payload.get("errors"):
                           raise RuntimeError(payload["errors"])
                       weeks = payload["data"]["user"]["contributionsCollection"]["contributionCalendar"]["weeks"]
-                      days = [(date.fromisoformat(d["date"]), d["contributionCount"]) for w in weeks for d in w["contributionDays"]]
-                      return days[-DAYS:]
+                      totals = {ym: 0 for ym in months}
+                      for week in weeks:
+                          for day in week["contributionDays"]:
+                              d = date.fromisoformat(day["date"])
+                              if (d.year, d.month) in totals and d <= today:
+                                  totals[(d.year, d.month)] += day["contributionCount"]
+                      return [(date(y, m, 1), totals[(y, m)]) for y, m in months]
                   except (OSError, ValueError, RuntimeError) as exc:
                       error = exc
                       time.sleep(5 * (attempt + 1))
               raise RuntimeError(f"GraphQL request failed: {error}")
 
 
-          def graph_svg(title, days):
+          def nice_step(peak):
+              raw = max(peak / 4, 1)
+              mag = 10 ** math.floor(math.log10(raw))
+              options = [m * mag for m in (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10)]
+              return next(int(s) for s in options if s >= raw and s == int(s))
+
+
+          def graph_svg(title, months):
               W, H = 1200, 420
-              left, right, top, bottom, pad = 80, 40, 96, 74, 14
+              left, right, top, bottom, pad = 80, 40, 104, 84, 30
               plot_w, plot_h = W - left - right, H - top - bottom
-              counts = [c for _, c in days]
-              step = max(1, -(-max(counts) // 4))
+              counts = [c for _, c in months]
+              step = nice_step(max(counts))
               y_max = step * 4
               inner = plot_w - 2 * pad
 
               def x(i):
-                  return left + pad + (inner * i / (len(days) - 1) if len(days) > 1 else inner / 2)
+                  return left + pad + inner * i / (len(months) - 1)
 
               def y(v):
                   return top + plot_h - plot_h * v / y_max
 
-              first, last = days[0][0], days[-1][0]
-              subtitle = f"Last {len(days)} days, {sum(counts):,} contributions, {first:%b} {first.day} - {last:%b} {last.day}"
+              first, last = months[0][0], months[-1][0]
+              subtitle = f"Last {len(months)} months, {sum(counts):,} contributions, {first:%b %Y} - {last:%b %Y}"
               pts = [(x(i), y(c)) for i, c in enumerate(counts)]
               base = y(0)
               line = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
@@ -379,12 +409,18 @@ jobs:
               for k in range(5):
                   gy = y(step * k)
                   grid.append(f'<line x1="{left}" y1="{gy:.1f}" x2="{W - right}" y2="{gy:.1f}" stroke="{GRID}"/>')
-                  grid.append(f'<text x="{left - 12}" y="{gy + 4:.1f}" class="t" text-anchor="end">{step * k}</text>')
-              labels = [f'<text x="{x(i):.1f}" y="{H - bottom + 24}" class="t" text-anchor="middle">{d.day}</text>' for i, (d, _) in enumerate(days)]
-              dots = [
-                  f'<circle cx="{px:.1f}" cy="{py:.1f}" r="4" fill="{POINT}"><title>{d:%b} {d.day}: {c}</title></circle>'
-                  for (px, py), (d, c) in zip(pts, days)
-              ]
+                  grid.append(f'<text x="{left - 12}" y="{gy + 4:.1f}" class="t" text-anchor="end">{step * k:,}</text>')
+
+              labels = []
+              for i, (d, _) in enumerate(months):
+                  labels.append(f'<text x="{x(i):.1f}" y="{H - bottom + 26}" class="t" text-anchor="middle">{d:%b}</text>')
+                  if i == 0 or d.month == 1:
+                      labels.append(f'<text x="{x(i):.1f}" y="{H - bottom + 42}" class="y" text-anchor="middle">{d.year}</text>')
+
+              dots = []
+              for (px, py), (d, c) in zip(pts, months):
+                  dots.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="5" fill="{POINT}"><title>{d:%B %Y}: {c}</title></circle>')
+                  dots.append(f'<text x="{px:.1f}" y="{py - 14:.1f}" class="v" text-anchor="middle">{c:,}</text>')
 
               return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(title)}">
           <title>{escape(title)}: {escape(subtitle)}</title>
@@ -392,6 +428,8 @@ jobs:
           .h{{font:600 22px {FONT};fill:{TITLE}}}
           .s{{font:13px {FONT};fill:{TEXT}}}
           .t{{font:12px {FONT};fill:{TEXT}}}
+          .y{{font:11px {FONT};fill:{MUTED}}}
+          .v{{font:600 12px {FONT};fill:{TEXT}}}
           .a{{font:600 13px {FONT};fill:{TEXT}}}
           .line{{stroke-dasharray:4000;stroke-dashoffset:4000;animation:draw 1.6s ease-out forwards}}
           .fade{{opacity:0;animation:fade .6s ease-in .8s forwards}}
@@ -405,7 +443,7 @@ jobs:
           {''.join(grid)}
           {''.join(labels)}
           <text x="28" y="{top + plot_h / 2:.1f}" class="a" text-anchor="middle" transform="rotate(-90 28 {top + plot_h / 2:.1f})">Contributions</text>
-          <text x="{left + plot_w / 2:.1f}" y="{H - 16}" class="a" text-anchor="middle">Days</text>
+          <text x="{left + plot_w / 2:.1f}" y="{H - 14}" class="a" text-anchor="middle">Months</text>
           <path d="{area}" fill="url(#fill)" class="fade"/>
           <polyline points="{line}" fill="none" stroke="{LINE}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" class="line"/>
           <g class="fade">{''.join(dots)}</g>
@@ -416,11 +454,12 @@ jobs:
           def main():
               user, out = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "dist"
               title = os.environ.get("GRAPH_TITLE") or f"{user}'s Contribution Graph"
-              days = fetch_days(user)
+              today = datetime.now(timezone.utc).date()
+              months = fetch_months(user, today)
               os.makedirs(out, exist_ok=True)
               with open(os.path.join(out, "activity-graph.svg"), "w", encoding="utf-8") as f:
-                  f.write(graph_svg(title, days))
-              print(f"activity graph: {len(days)} days, {sum(c for _, c in days)} contributions")
+                  f.write(graph_svg(title, months))
+              print(f"activity graph: {[(f'{d:%b %Y}', c) for d, c in months]}")
 
 
           if __name__ == "__main__":
