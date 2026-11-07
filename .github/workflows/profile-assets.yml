@@ -298,6 +298,135 @@ jobs:
               main()
           PY
 
+      - name: Generate activity graph
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_USER: ${{ github.repository_owner }}
+          GRAPH_TITLE: "Saket's Contribution Graph"
+        run: |
+          python3 - "$GH_USER" dist <<'PY'
+          import json
+          import os
+          import sys
+          import time
+          import urllib.request
+          from datetime import date
+          from html import escape
+
+          DAYS = 31
+          FONT = "'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif"
+          BG, TITLE, TEXT, GRID, LINE, POINT = "#1a1b27", "#70a5fd", "#a9b1d6", "#2a2e45", "#bf91f3", "#38bdae"
+
+          QUERY = """
+          query($login: String!) {
+            user(login: $login) {
+              contributionsCollection {
+                contributionCalendar { weeks { contributionDays { date contributionCount } } }
+              }
+            }
+          }
+          """
+
+
+          def fetch_days(user):
+              body = json.dumps({"query": QUERY, "variables": {"login": user}}).encode()
+              headers = {
+                  "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                  "Content-Type": "application/json",
+                  "User-Agent": "profile-cards",
+              }
+              error = None
+              for attempt in range(4):
+                  try:
+                      req = urllib.request.Request("https://api.github.com/graphql", data=body, headers=headers)
+                      with urllib.request.urlopen(req, timeout=60) as res:
+                          payload = json.loads(res.read().decode())
+                      if payload.get("errors"):
+                          raise RuntimeError(payload["errors"])
+                      weeks = payload["data"]["user"]["contributionsCollection"]["contributionCalendar"]["weeks"]
+                      days = [(date.fromisoformat(d["date"]), d["contributionCount"]) for w in weeks for d in w["contributionDays"]]
+                      return days[-DAYS:]
+                  except (OSError, ValueError, RuntimeError) as exc:
+                      error = exc
+                      time.sleep(5 * (attempt + 1))
+              raise RuntimeError(f"GraphQL request failed: {error}")
+
+
+          def graph_svg(title, days):
+              W, H = 1200, 420
+              left, right, top, bottom, pad = 80, 40, 96, 74, 14
+              plot_w, plot_h = W - left - right, H - top - bottom
+              counts = [c for _, c in days]
+              step = max(1, -(-max(counts) // 4))
+              y_max = step * 4
+              inner = plot_w - 2 * pad
+
+              def x(i):
+                  return left + pad + (inner * i / (len(days) - 1) if len(days) > 1 else inner / 2)
+
+              def y(v):
+                  return top + plot_h - plot_h * v / y_max
+
+              first, last = days[0][0], days[-1][0]
+              subtitle = f"Last {len(days)} days, {sum(counts):,} contributions, {first:%b} {first.day} - {last:%b} {last.day}"
+              pts = [(x(i), y(c)) for i, c in enumerate(counts)]
+              base = y(0)
+              line = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
+              area = f"M{pts[0][0]:.1f},{base:.1f} L{line.replace(' ', ' L')} L{pts[-1][0]:.1f},{base:.1f} Z"
+
+              grid = []
+              for k in range(5):
+                  gy = y(step * k)
+                  grid.append(f'<line x1="{left}" y1="{gy:.1f}" x2="{W - right}" y2="{gy:.1f}" stroke="{GRID}"/>')
+                  grid.append(f'<text x="{left - 12}" y="{gy + 4:.1f}" class="t" text-anchor="end">{step * k}</text>')
+              labels = [f'<text x="{x(i):.1f}" y="{H - bottom + 24}" class="t" text-anchor="middle">{d.day}</text>' for i, (d, _) in enumerate(days)]
+              dots = [
+                  f'<circle cx="{px:.1f}" cy="{py:.1f}" r="4" fill="{POINT}"><title>{d:%b} {d.day}: {c}</title></circle>'
+                  for (px, py), (d, c) in zip(pts, days)
+              ]
+
+              return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(title)}">
+          <title>{escape(title)}: {escape(subtitle)}</title>
+          <style>
+          .h{{font:600 22px {FONT};fill:{TITLE}}}
+          .s{{font:13px {FONT};fill:{TEXT}}}
+          .t{{font:12px {FONT};fill:{TEXT}}}
+          .a{{font:600 13px {FONT};fill:{TEXT}}}
+          .line{{stroke-dasharray:4000;stroke-dashoffset:4000;animation:draw 1.6s ease-out forwards}}
+          .fade{{opacity:0;animation:fade .6s ease-in .8s forwards}}
+          @keyframes draw{{to{{stroke-dashoffset:0}}}}
+          @keyframes fade{{to{{opacity:1}}}}
+          </style>
+          <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{LINE}" stop-opacity=".45"/><stop offset="1" stop-color="{LINE}" stop-opacity="0"/></linearGradient></defs>
+          <rect x="0.5" y="0.5" width="{W - 1}" height="{H - 1}" rx="10" fill="{BG}"/>
+          <text x="{W / 2}" y="42" class="h" text-anchor="middle">{escape(title)}</text>
+          <text x="{W / 2}" y="66" class="s" text-anchor="middle">{escape(subtitle)}</text>
+          {''.join(grid)}
+          {''.join(labels)}
+          <text x="28" y="{top + plot_h / 2:.1f}" class="a" text-anchor="middle" transform="rotate(-90 28 {top + plot_h / 2:.1f})">Contributions</text>
+          <text x="{left + plot_w / 2:.1f}" y="{H - 16}" class="a" text-anchor="middle">Days</text>
+          <path d="{area}" fill="url(#fill)" class="fade"/>
+          <polyline points="{line}" fill="none" stroke="{LINE}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" class="line"/>
+          <g class="fade">{''.join(dots)}</g>
+          </svg>
+          """
+
+
+          def main():
+              user, out = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "dist"
+              title = os.environ.get("GRAPH_TITLE") or f"{user}'s Contribution Graph"
+              days = fetch_days(user)
+              os.makedirs(out, exist_ok=True)
+              with open(os.path.join(out, "activity-graph.svg"), "w", encoding="utf-8") as f:
+                  f.write(graph_svg(title, days))
+              print(f"activity graph: {len(days)} days, {sum(c for _, c in days)} contributions")
+
+
+          if __name__ == "__main__":
+              main()
+          PY
+
       - name: Generate top languages card
         continue-on-error: true
         uses: stats-organization/github-readme-stats-action@v2
