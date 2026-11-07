@@ -116,11 +116,7 @@ Some of the projects I've contributed to:
     </picture>
   </a>
   <br/><br/>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://github-readme-activity-graph.vercel.app/graph?username=saket0187&custom_title=Contribution%20activity&bg_color=0d1117&color=c4b5fd&title_color=ffffff&line=8b5cf6&point=ffffff&area=true&area_color=8b5cf6&hide_border=true&radius=8"/>
-    <source media="(prefers-color-scheme: light)" srcset="https://github-readme-activity-graph.vercel.app/graph?username=saket0187&custom_title=Contribution%20activity&bg_color=ffffff&color=4c1d95&title_color=2e1065&line=7c3aed&point=2e1065&area=true&area_color=a78bfa&hide_border=true&radius=8"/>
-    <img width="100%" alt="Contribution activity graph" src="https://github-readme-activity-graph.vercel.app/graph?username=saket0187&custom_title=Contribution%20activity&bg_color=0d1117&color=c4b5fd&title_color=ffffff&line=8b5cf6&point=ffffff&area=true&area_color=8b5cf6&hide_border=true&radius=8"/>
-  </picture>
+  <img width="100%" alt="Contribution activity graph" src="https://raw.githubusercontent.com/saket0187/saket0187/output/activity-graph.svg"/>
   <br/><br/>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/saket0187/saket0187/output/github-snake-dark.svg"/>
